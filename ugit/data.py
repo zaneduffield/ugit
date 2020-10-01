@@ -1,4 +1,5 @@
 import hashlib
+import json
 import os
 import shutil
 
@@ -29,6 +30,7 @@ HEAD_ALIASES = ['@']
 HEADS = 'heads'
 OBJECTS = 'objects'
 REMOTE = 'remote'
+INDEX = 'index'
 REFS = 'refs'
 TAGS = 'tags'
 
@@ -95,6 +97,20 @@ def iter_refs(prefix='', deref=True):
         ref = get_ref(refname, deref=deref)
         if ref.value:
             yield refname, ref
+
+
+@contextmanager
+def get_index():
+    index = {}
+    index_path = f'{GIT_DIR}/{INDEX}'
+    if os.path.isfile(index_path):
+        with open(index_path) as f:
+            index = json.load(f)
+
+    yield index
+
+    with open(index_path, 'w') as f:
+        json.dump(index, f)
 
 
 def hash_object(data, type_=BLOB_T):

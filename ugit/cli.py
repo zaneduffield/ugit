@@ -56,6 +56,7 @@ def parse_args():
 
     diff_parser = commands.add_parser('diff')
     diff_parser.set_defaults(func=_diff)
+    diff_parser.add_argument('--cached', action='store_true')
     diff_parser.add_argument('commit', nargs='?', type=oid, default=data.HEAD)
 
     checkout_parser = commands.add_parser('checkout')
@@ -99,6 +100,10 @@ def parse_args():
     push_parser.set_defaults(func=push)
     push_parser.add_argument('remote')
     push_parser.add_argument('branch')
+
+    add_parser = commands.add_parser('add')
+    add_parser.set_defaults(func=add)
+    add_parser.add_argument('files', nargs='+')
 
     return parser.parse_args()
 
@@ -164,9 +169,25 @@ def log(args):
 
 
 def _diff(args):
-    tree = args.commit and base.get_commit(args.commit).tree
+    oid = args.commit and base.get_oid(args.commit)
 
-    result = diff.diff_trees(base.get_tree(tree), base.get_working_tree())
+    if args.commit:
+        # if a commit was provided, diff from it
+        tree_from = base.get_tree(oid and base.get_commit(oid).tree)
+
+    if args.cached:
+        tree_to = base.get_index_tree()
+        if not args.commit:
+            # if not commit was provided, diff from HEAD
+            oid = base.get_oid(data.HEAD)
+            tree_from = base.get_tree(oid and base.get_commit(oid).tree)
+    else:
+        tree_to = base.get_working_tree()
+        if not args.commit:
+            # if no commit was provided, diff from index
+            tree_from = base.get_index_tree()
+
+    result = diff.diff_trees(tree_from, tree_to)
     sys.stdout.flush()
     sys.stdout.buffer.write(result)
 
@@ -233,7 +254,11 @@ def status(args):
 
     print('\nChanges to be committed:\n')
     HEAD_tree = HEAD and base.get_commit(HEAD).tree
-    for path, action in diff.iter_changed_files(base.get_tree(HEAD_tree), base.get_working_tree()):
+    for path, action in diff.iter_changed_files(base.get_tree(HEAD_tree), base.get_index_tree()):
+        print(f'    {action}: {path}')
+
+    print('\nChange not staged for commit:\n')
+    for path, action in diff.iter_changed_files(base.get_index_tree(), base.get_working_tree()):
         print(f'    {action}: {path}')
 
 
@@ -255,6 +280,10 @@ def fetch(args):
 
 def push(args):
     remote.push(args.remote, f'{data.REFS}/{data.HEADS}/{args.branch}')
+
+
+def add(args):
+    base.add(args.files)
 
 
 if __name__ == '__main__':
